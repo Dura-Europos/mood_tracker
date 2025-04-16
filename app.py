@@ -2,9 +2,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import gspread
-from datetime import datetime, date
-import json
-import os
+from datetime import datetime
 from google.oauth2.service_account import Credentials
 
 # Define constants
@@ -18,18 +16,18 @@ APP_TITLE = "Mood of the Queue"
 SHEET_ID = '1c0xNjBGPyUMv9rJ1SecPDLQ13L_OrrNxREMw-SZ-O9A'
 DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
-# configure page
+# Configure page and set up title
 st.set_page_config(page_title=APP_TITLE, page_icon="🧪")
 st.title(APP_TITLE)
 
-# Define functions
+# Connect to google sheet
 @st.cache_resource
 def connect_to_gsheet():
-    """Connect to google sheet
+    """Connect to google sheet with st.secrets.
     """
     scope = ['https://spreadsheets.google.com/feeds',
              'https://www.googleapis.com/auth/drive']
-    # NOTE: make sure to set up service account and download the credentials to the same directory
+    # NOTE: make sure to set up service account and save the credential information to streamlit (cloud) or /streamlit/secrets.toml
     creds = Credentials.from_service_account_info(
         st.secrets["gcp_service_account"], 
         scopes=scope
@@ -39,7 +37,6 @@ def connect_to_gsheet():
     
     return sheet
 
-# Connect to google sheet
 sheet = connect_to_gsheet()
 _ = sheet.get_all_values() # Test to get data
 st.success("Connected to Google Sheet!")
@@ -47,74 +44,64 @@ st.success("Connected to Google Sheet!")
 # Section 1: Log Mood
 st.header("Log a new mood", divider="gray")
 
-# NOTE: Keys of EMOJI_TO_WORDS are the emojis
 selected_mood = st.selectbox(
     "Select the current queue mood:",
-    options=list(EMOJI_TO_WORDS.keys()),
+    options=list(EMOJI_TO_WORDS.keys()), # Remember keys of EMOJI_TO_WORDS are the emojis
     format_func=lambda x: f"{x} - {EMOJI_TO_WORDS[x]}"
 )
-
-# Optional note
 note = st.text_area("Add a short note (optional, no more than 200 char):", max_chars=200)
 
-# Submit button
+## Submit button
 if st.button("Submit Mood"):
     if not selected_mood:
         st.warning("Please select a mood before submitting")
-    # Get current timestamp
     timestamp = datetime.now().strftime(DATETIME_FORMAT)
-    
-    # Append to Google Sheet
     sheet.append_row([timestamp, selected_mood, note])
-    
     st.success("Mood logged successfully!")
+    # Real time update
     st.rerun()
 
 # Section 2: Visualize the mood for today
 st.header("Today's Queue Mood", divider="gray")
 
-# Add refresh button to manually refresh the data
+## Add refresh button to manually refresh the data
 if st.button("🔄 Refresh Data Manually"):
     st.rerun()
 
-# Get data from Google Sheet with headers
+# Get data
 data = sheet.get_all_records()  # Automatically uses first row as headers
 df = pd.DataFrame(data)
 
 if not df.empty:
     # Convert timestamp string to datetime
     df['Timestamp'] = pd.to_datetime(df['Timestamp'], format=DATETIME_FORMAT)
-    
     # Filter for today's data
     today = datetime.now().date()
-    today_str = date.today().strftime("%Y-%m-%d")
+    today_str = today.strftime("%Y-%m-%d")
     today_df = df[df['Timestamp'].dt.date == today]
     
     if not today_df.empty:
         # Count moods
         mood_counts = today_df['Mood'].value_counts()
-        
-        # Avoid using emoji as headers
+        # Avoid using emoji as bar label
         mood_counts_readable = pd.Series(
             index=[EMOJI_TO_WORDS.get(emoji) for emoji in mood_counts.index],
             data=mood_counts.values
         )
-        
-        # Create bar chart
+        # Plot bar chart
         fig, ax = plt.subplots(figsize=(10, 6))
         mood_counts_readable.plot(kind='bar', ax=ax)
         plt.title(f"Queue Mood for: {today_str}")
         plt.xlabel("Mood")
         plt.ylabel("Count")
         plt.xticks(rotation=0)
-        
         # Display chart
         st.pyplot(fig)
         
-        # Display raw data
+        # Display raw data for reference
         st.subheader("Raw Data")
         st.dataframe(today_df)
-    else:
+    else: # empty today_df
         st.info("No moods logged today yet.")
-else:
+else: # empty df
     st.info("No data in the Google Sheet yet.")
