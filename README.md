@@ -23,7 +23,7 @@ How to use it:
 
 High level ideas:
 - Minimal UI friction: Just a dropdown and a note field to log the mood
-- Lightweight backend: Google Sheets avoids spinning up a full database
+- Lightweight backend: Google Sheets avoids spinning up a full database. Also connection is cached so that if the tab reopens, it doesn't require another connection 
 - Fast feedback loop: Visuals update instantly (plus button to refresh manually) to give a sense of progress
 - Separation of concerns: one section for input, one for visualization.
 
