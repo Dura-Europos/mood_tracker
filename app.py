@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import gspread
-from datetime import datetime
+from datetime import datetime, date
 import json
 import os
 from google.oauth2.service_account import Credentials
@@ -44,82 +44,77 @@ sheet = connect_to_gsheet()
 _ = sheet.get_all_values() # Test to get data
 st.success("Connected to Google Sheet!")
 
-# The site has two tabs.
-## Tab 1 for logging the mod
-## Tab 2 for visualize the mood for today
-tab1, tab2 = st.tabs(["Log Mood", "View Moods"])
+# Section 1: Log Mood
+st.header("Log a new mood", divider="gray")
 
-# Log Mood tab
-with tab1:
-    st.header("Log a new mood")
-    
-    # NOTE: Keys of EMOJI_TO_WORDS are the emojis
-    selected_mood = st.selectbox(
-        "Select the current queue mood:",
-        options=list(EMOJI_TO_WORDS.keys()),
-        format_func=lambda x: f"{x} - {EMOJI_TO_WORDS[x]}"
-    )
-    
-    # Optional note
-    note = st.text_area("Add a short note (optional, no more than 200 char):", max_chars=200)
-    
-    # Submit button
-    if st.button("Submit Mood"):
-        if not selected_mood:
-            st.warning("Please select a mood before submitting")
-        # Get current timestamp
-        timestamp = datetime.now().strftime(DATETIME_FORMAT)
-        
-        # Append to Google Sheet
-        sheet.append_row([timestamp, selected_mood, note])
-        
-        st.success("Mood logged successfully!")
-        st.rerun()
+# NOTE: Keys of EMOJI_TO_WORDS are the emojis
+selected_mood = st.selectbox(
+    "Select the current queue mood:",
+    options=list(EMOJI_TO_WORDS.keys()),
+    format_func=lambda x: f"{x} - {EMOJI_TO_WORDS[x]}"
+)
 
-with tab2:
-    st.header("Today's Queue Mood")
+# Optional note
+note = st.text_area("Add a short note (optional, no more than 200 char):", max_chars=200)
+
+# Submit button
+if st.button("Submit Mood"):
+    if not selected_mood:
+        st.warning("Please select a mood before submitting")
+    # Get current timestamp
+    timestamp = datetime.now().strftime(DATETIME_FORMAT)
     
-    # Add refresh button
-    if st.button("🔄 Refresh Data"):
-        st.rerun()
+    # Append to Google Sheet
+    sheet.append_row([timestamp, selected_mood, note])
     
-    # Get data from Google Sheet with headers
-    data = sheet.get_all_records()  # Automatically uses first row as headers
-    df = pd.DataFrame(data)
+    st.success("Mood logged successfully!")
+    st.rerun()
+
+# Section 2: Visualize the mood for today
+st.header("Today's Queue Mood", divider="gray")
+
+# Add refresh button to manually refresh the data
+if st.button("🔄 Refresh Data Manually"):
+    st.rerun()
+
+# Get data from Google Sheet with headers
+data = sheet.get_all_records()  # Automatically uses first row as headers
+df = pd.DataFrame(data)
+
+if not df.empty:
+    # Convert timestamp string to datetime
+    df['Timestamp'] = pd.to_datetime(df['Timestamp'], format=DATETIME_FORMAT)
     
-    if not df.empty:
-        # Convert timestamp string to datetime
-        df['Timestamp'] = pd.to_datetime(df['Timestamp'], format=DATETIME_FORMAT)
+    # Filter for today's data
+    today = datetime.now().date()
+    today_str = date.today().strftime("%Y-%m-%d")
+    today_df = df[df['Timestamp'].dt.date == today]
+    
+    if not today_df.empty:
+        # Count moods
+        mood_counts = today_df['Mood'].value_counts()
         
-        # Filter for today's data
-        today = datetime.now().date()
-        today_df = df[df['Timestamp'].dt.date == today]
+        # Avoid using emoji as headers
+        mood_counts_readable = pd.Series(
+            index=[EMOJI_TO_WORDS.get(emoji) for emoji in mood_counts.index],
+            data=mood_counts.values
+        )
         
-        if not today_df.empty:
-            # Count moods
-            mood_counts = today_df['Mood'].value_counts()
-            
-            # Avoid using emoji as headers
-            mood_counts_readable = pd.Series(
-                index=[EMOJI_TO_WORDS.get(emoji) for emoji in mood_counts.index],
-                data=mood_counts.values
-            )
-            
-            # Create bar chart
-            fig, ax = plt.subplots(figsize=(10, 6))
-            mood_counts_readable.plot(kind='bar', ax=ax)
-            plt.title("Today's Queue Mood")
-            plt.xlabel("Mood")
-            plt.ylabel("Count")
-            plt.xticks(rotation=0)
-            
-            # Display chart
-            st.pyplot(fig)
-            
-            # Display raw data
-            st.subheader("Raw Data")
-            st.dataframe(today_df)
-        else:
-            st.info("No moods logged today yet.")
+        # Create bar chart
+        fig, ax = plt.subplots(figsize=(10, 6))
+        mood_counts_readable.plot(kind='bar', ax=ax)
+        plt.title(f"Queue Mood for: {today_str}")
+        plt.xlabel("Mood")
+        plt.ylabel("Count")
+        plt.xticks(rotation=0)
+        
+        # Display chart
+        st.pyplot(fig)
+        
+        # Display raw data
+        st.subheader("Raw Data")
+        st.dataframe(today_df)
     else:
-        st.info("No data in the Google Sheet yet.")
+        st.info("No moods logged today yet.")
+else:
+    st.info("No data in the Google Sheet yet.")
