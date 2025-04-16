@@ -1,10 +1,11 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-import datetime
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
+import json
+import os
+from google.oauth2.service_account import Credentials
 
 # Define constants
 EMOJI_TO_WORDS = {
@@ -29,8 +30,10 @@ def connect_to_gsheet():
     scope = ['https://spreadsheets.google.com/feeds',
              'https://www.googleapis.com/auth/drive']
     # NOTE: make sure to set up service account and download the credentials to the same directory
-    creds_dict = json.loads(st.secrets["gcp_service_account"])
-    creds = ServiceAccountCredentials.from_dict(creds_dict)
+    creds = Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"], 
+        scopes=scope
+    )
     client = gspread.authorize(creds)
     sheet = client.open_by_key(SHEET_ID).sheet1
     
